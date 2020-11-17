@@ -1,0 +1,47 @@
+#!/bin/zsh
+
+function getNamefromApple ()
+{
+
+## Get the Mac's serial number
+SerialNum=$(ioreg -rd1 -c IOPlatformExpertDevice | awk -F'"' '/IOPlatformSerialNumber/{print $4}')
+
+## Check the length of the serial number and set an appropriate string to use for the lookup
+if [[ ${#SerialNum} -ge 12 ]]; then
+	Serial="${SerialNum: -4}"
+else
+	Serial="${SerialNum: -3}"
+fi
+
+## Get the full model name from Apple's support page, using the portion of the Serial Number from above
+FullModelName=$(curl -s "https://support-sp.apple.com/sp/product?cc=$Serial&lang=en_US" | xpath '/root/configCode/text()')
+
+## If we didn't get an empty response, send that model name into a local file
+if [ "$FullModelName" != "" ]; then
+	echo "$FullModelName" > "/Library/Application Support/JAMF/MacModelName"
+	## Echo the result for the EA
+	echo "<result>$FullModelName</result>"
+else
+	## If we really weren't able to find anything, set "NOT FOUND" as our result
+	echo "<result>NOT FOUND</result>"
+fi
+
+}
+
+## First thing we do is check for the local model name file
+if [ ! -f "/Library/Application Support/JAMF/MacModelName" ]; then
+	## If it's not there, we run the function to get the name from Apple
+	echo "Local model file not found. Getting info from Apple..."
+	getNamefromApple
+else
+	## If it was there, cat it to check the information
+	echo "Local model file located. Checking information..."
+
+	localModelName=$(cat "/Library/Application Support/JAMF/MacModelName")
+	if [[ "$localModelName" != "" ]]; then
+		echo "<result>$localModelName</result>"
+	else
+		## Otherwise, go out to Apple to get the model name
+		getNamefromApple
+	fi
+fi
